@@ -37,6 +37,7 @@ struct Ball {
 };
 
 struct Paddle {
+	uint8_t id;
 	int prevX, prevY;
 	int posX, posY;
 };
@@ -56,10 +57,21 @@ struct Paddle {
 #define END_SCREEN 10
 #define CREDIT_SCREEN 99
 
+// color
+#define COLOR_DEFAULT 0
+#define COLOR_BLACK 0
+#define COLOR_WHITE 15
+#define COLOR_RED 196
+#define COLOR_BLUE 21
+#define COLOR_BLUE_SKY 51
+#define COLOR_LIGHT_GREEN 40
+#define COLOR_DARK_GREEN 34
+#define COLOR_YELLOW 226
+#define COLOR_PURPLE 99
 
 // constant
 #define PADDLE_SIZE_X 1
-#define PADDLE_SZIE_Y 3
+#define PADDLE_SZIE_Y 3 // Half
 #define PADDLE_SPEED 2
 /* USER CODE END PD */
 
@@ -77,8 +89,8 @@ UART_HandleTypeDef huart2;
 int state = START_SCREEN;
 int tracker = NULL_SCREEN;
 int score1 = 0, score2 = 0;
-uint8_t isGameStart = 0, isGameEnd = 0;
-uint8_t winner = 0, win_score = 1;
+uint8_t isGameStart = 0, isGameEnd = 0, enableRandom = 0;
+uint8_t winner = 0, win_score = 3;
 struct Ball ball = {
 		.posX = 40,
 		.posY = 12,
@@ -86,10 +98,12 @@ struct Ball ball = {
 		.mvV = 1,
 };
 struct Paddle paddle1 = {
+	.id = 1,
 	.posX = 75,
 	.posY = 12
 };
 struct Paddle paddle2 = {
+	.id = 2,
 	.posX = 5,
 	.posY = 12,
 };
@@ -118,6 +132,7 @@ void setPaddlePostion(struct Paddle* paddle, int value);
 void setBallPosition(struct Ball *ball, int col, int row);
 void updateBallPosition(struct Ball *ball);
 void resetPosition(void);
+void resetVelocity(void);
 void resetScore(void);
 void reset(void);
 uint8_t checkIfScore(void);
@@ -129,8 +144,11 @@ void set_cursor(uint8_t col, uint8_t row);
 void printGameTitle(uint8_t start_col, uint8_t start_row);
 void printHTP(uint8_t start_col, uint8_t start_row);
 void printGameOver(uint8_t start_col, uint8_t start_row);
+void printCredit(uint8_t start_col, uint8_t start_row);
 // utility
 int boundMaxMin(int value, int max, int min);
+void setBackgroundColor(uint8_t color);
+void setForegroundColor(uint8_t color);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -150,15 +168,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   			resetScore();
   			isGameStart = 0;
   			isGameEnd = 0;
+  			enableRandom = 0;
   			initial();
 
   			break;
-  		case 'c': case 'C':
-  			state = CREDIT_SCREEN;
-
-  			// Before go to CREDIT SCREEN
-  			clrscr();
-  			break;
+  		case '1': win_score = 1; tracker = NULL_SCREEN; break;
+  		case '2': win_score = 2; tracker = NULL_SCREEN; break;
+  		case '3': win_score = 3; tracker = NULL_SCREEN; break;
+  		case '4': win_score = 4; tracker = NULL_SCREEN; break;
+  		case '5': win_score = 5; tracker = NULL_SCREEN; break;
+  		case '6': win_score = 6; tracker = NULL_SCREEN; break;
+  		case '7': win_score = 7; tracker = NULL_SCREEN; break;
+  		case '8': win_score = 8; tracker = NULL_SCREEN; break;
+  		case '9': win_score = 9; tracker = NULL_SCREEN; break;
+  		case '0': win_score = 10; tracker = NULL_SCREEN; break;
   		}
   		break;
   	case GAME_SCREEN:
@@ -183,6 +206,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 			resetPosition();
 			resetScore();
 			break;
+		case 'c': case 'C':
+			enableRandom = 1;
+			set_cursor(65, 24);
+			print("Random mode ON!");
+			break;
 		}
   		break;
   	case END_SCREEN:
@@ -195,6 +223,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 			resetScore();
 			isGameStart = 0;
 			isGameEnd = 0;
+			enableRandom = 0;
 			initial();
   			break;
   		case 'x': case 'X':
@@ -202,12 +231,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   			break;
   		}
   		break;
-  	case CREDIT_SCREEN:
-  		// Press any
-  		state = START_SCREEN;
-  		// TODO: Implement Credit screen
-//  		printCredit();
   	}
+
 
   /* set up to receive another char */
   HAL_UART_Receive_IT(&huart2, rxData, 1);
@@ -464,8 +489,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, 0);
 }
 
-const char paddleSymbol[] = "@";
-const char lineSymbol[] = "X";
+const uint8_t bst = 93;
+const uint8_t bed = 226;
+uint8_t bc = 93;
 
 // Tick()
 void tick() {
@@ -511,8 +537,13 @@ void welcome() {
 	// Draw Game Screen for being background
 	initial();
 
-	printGameTitle(30, 5);
+	const char buffer[] = "\033[?25l"; // Invisible Cursor
+
+	print(buffer);
+
+	printGameTitle(31, 5);
 	printHTP(25, 15);
+	printCredit(60, 24);
 }
 
 void initial() {
@@ -521,6 +552,14 @@ void initial() {
 	drawZoneLine();
 	drawPaddle(&paddle1, 1);
 	drawPaddle(&paddle2, 1);
+
+	if (enableRandom) {
+		set_cursor(65, 24);
+		print("Random mode ON!");
+	}
+
+	srand(SysTick->VAL);
+
 	return;
 }
 
@@ -532,9 +571,9 @@ void gameover() {
 uint8_t checkIfScore() {
 	struct Ball *b = &ball;
 	if (b->mvH > 0 && b->posX + b->mvH >= SCREEN_WIDTH) { // Player2 score!
-		return 1;
-	} else if (b->mvH < 0 && b->posX + b->mvH <= 0) { // Player1 score!
 		return 2;
+	} else if (b->mvH < 0 && b->posX + b->mvH <= 0) { // Player1 score!
+		return 1;
 	}
 	else {
 		return 0;
@@ -544,25 +583,31 @@ uint8_t checkIfScore() {
 // Draw functions
 void drawScoreBar() {
 	char buff[16];
-	set_cursor(35, 0);
-	HAL_UART_Transmit(&huart2, (uint8_t*)buff, sprintf(buff, "%d", score1), HAL_MAX_DELAY);
-	set_cursor(3, 0);
-	print("P2");
 	set_cursor(45, 0);
-	HAL_UART_Transmit(&huart2, (uint8_t*)buff, sprintf(buff, "%d", score2), HAL_MAX_DELAY);
+	setForegroundColor(COLOR_RED);
+	HAL_UART_Transmit(&huart2, (uint8_t*)buff, sprintf(buff, "%d", score1), HAL_MAX_DELAY);
 	set_cursor(77, 0);
 	print("P1");
+	set_cursor(35, 0);
+	setForegroundColor(COLOR_BLUE);
+	HAL_UART_Transmit(&huart2, (uint8_t*)buff, sprintf(buff, "%d", score2), HAL_MAX_DELAY);
+	set_cursor(3, 0);
+	print("P2");
+
+	setForegroundColor(COLOR_WHITE);
 }
 
 void drawPaddle(struct Paddle* paddle, uint8_t force) {
 	if (!force && paddle->prevX == paddle->posX && paddle->prevY == paddle->posY) return;
 
-	char clean = ' ';
+//	char clean = ' ';
 
 	// Clean up Old
+	set_cursor(paddle->posX, paddle->prevY-3);
+	setBackgroundColor(COLOR_DEFAULT);
 	for (uint8_t j = paddle->prevY-3; j <= paddle->prevY+3; ++j) {
 		set_cursor(paddle->posX, j);
-		HAL_UART_Transmit(&huart2, (uint8_t*)&clean, sizeof(clean), HAL_MAX_DELAY);
+		print(" ");
 	}
 
 	// Set new values to previous position
@@ -570,25 +615,35 @@ void drawPaddle(struct Paddle* paddle, uint8_t force) {
 	paddle->prevY = paddle->posY;
 
 	// Render New
+	set_cursor(paddle->posX, paddle->posY-3);
+	setBackgroundColor(paddle->id == 1 ? COLOR_RED : COLOR_BLUE);
 	for (uint8_t j = paddle->posY-3; j <= paddle->posY+3; ++j) {
 		set_cursor(paddle->posX, j);
-		print("@");
+		print(" ");
 	}
+
+	setBackgroundColor(COLOR_DEFAULT);
 	return;
 }
 
 void drawZoneLine() {
+	set_cursor(40, 0);
+	setBackgroundColor(COLOR_LIGHT_GREEN);
 	for (uint8_t i = 0; i <= SCREEN_HEIGHT; ++i) {
 		set_cursor(40, i);
-		HAL_UART_Transmit(&huart2, (uint8_t*)lineSymbol, sizeof(lineSymbol), 100);
+		print(" ");
 	}
+	setBackgroundColor(COLOR_DEFAULT);
+	return;
 }
 
 void drawBall(struct Ball *ball) {
-//	if (ball->prevX == ball->posX && ball->prevY == ball->posY) return;
+	if (ball->prevX == ball->posX && ball->prevY == ball->posY) return;
 
 	// Clean up Old
-//	set_cursor(ball->prevX, ball->prevY);
+	set_cursor(ball->prevX, ball->prevY);
+	setBackgroundColor(ball->prevX == 40 ? COLOR_LIGHT_GREEN : COLOR_DEFAULT);
+	print(" ");
 
 	// Update previous position
 	ball->prevX = ball->posX;
@@ -596,6 +651,15 @@ void drawBall(struct Ball *ball) {
 
 	// Render New
 	set_cursor(ball->posX, ball->posY);
+	setBackgroundColor(bc++);
+	bc %= bed;
+	if (bc == 0) {
+		bc = bst;
+	}
+	print(" ");
+
+	setBackgroundColor(COLOR_DEFAULT);
+	return;
 }
 
 // update functions
@@ -609,6 +673,19 @@ void updateBallPosition(struct Ball *ball) {
 	if ((ball->mvH > 0 && ball->posX + ball->mvH >= p1->posX && (ball->posY + ball->mvV <= p1->posY+PADDLE_SZIE_Y && ball->posY + ball->mvV >= p1->posY-PADDLE_SZIE_Y)) ||
 		(ball->mvH < 0 && ball->posX + ball->mvH <= p2->posX && (ball->posY + ball->mvV <= p2->posY+PADDLE_SZIE_Y && ball->posY + ball->mvV >= p2->posY-PADDLE_SZIE_Y)))
 	{
+		if (enableRandom) {
+			uint8_t chance = rand() % 101;
+			int sign = ball->mvH < 0 ? -1 : 1;
+			if (chance > 75) {
+				ball->mvH = 2 * sign;
+			} else {
+				ball->mvH = 3 * sign;
+			}
+
+			if (chance > 50) {
+				ball->mvV = -ball->mvV;
+			}
+		}
 		ball->mvH = -ball->mvH;
 	}
 
@@ -616,6 +693,15 @@ void updateBallPosition(struct Ball *ball) {
 
 	if ((ball->mvV < 0 && ball->posY + ball->mvV <= 0) ||
 		(ball->mvV > 0 && ball->posY + ball->mvV >= SCREEN_HEIGHT)) {
+		if (enableRandom) {
+			uint8_t chance = rand() % 101;
+			int sign = ball->mvV < 0 ? -1 : 1;
+			if (chance > 20) {
+				ball->mvV = 1 * sign;
+			} else {
+				ball->mvV = 2 * sign;
+			}
+		}
 		ball->mvV = -ball->mvV;
 	}
 
@@ -624,10 +710,15 @@ void updateBallPosition(struct Ball *ball) {
 
 void resetPosition() {
 	// Reset Position Paddle
-	setPaddlePostion(&paddle1, 10);
-	setPaddlePostion(&paddle2, 10);
+	setPaddlePostion(&paddle1, 12);
+	setPaddlePostion(&paddle2, 12);
 	// reset Postion Ball
 	setBallPosition(&ball, 40, 12);
+}
+
+void resetVelocity() {
+	ball.mvH = 2;
+	ball.mvV = 1;
 }
 
 void resetScore() {
@@ -636,6 +727,7 @@ void resetScore() {
 
 void reset() {
 	resetPosition();
+	resetVelocity();
 	// No reset Score <-- the difference
 
 	// Stop the game til user input any
@@ -683,26 +775,53 @@ void clrscr(void) {
 
 void printGameTitle(uint8_t start_col, uint8_t start_row) {
 	uint8_t col = start_col, row = start_row;
+	// Print P
 	set_cursor(col, row);
-	print("##   ##  #   #  ##  \n");
-	set_cursor(col, row+1);
-	print("# # #  # ##  # #  # \n");
-	set_cursor(col, row+2);
-	print("##  #  # # # # # ## \n");
-	set_cursor(col, row+3);
-	print("#   #  # #  ## #  # \n");
-	set_cursor(col, row+4);
-	print("#    ##  #   #  ##  \n");
+	setForegroundColor(COLOR_RED);
+	print("## "); set_cursor(col, row+1);
+	print("# #"); set_cursor(col, row+2);
+	print("## "); set_cursor(col, row+3);
+	print("#  "); set_cursor(col, row+4);
+	print("#  "); set_cursor(col, row+5);
+	// Print O
+	set_cursor(col+4, row);
+	setForegroundColor(COLOR_YELLOW);
+	print(" ## "); set_cursor(col+4, row+1);
+	print("#  #"); set_cursor(col+4, row+2);
+	print("#  #"); set_cursor(col+4, row+3);
+	print("#  #"); set_cursor(col+4, row+4);
+	print(" ## "); set_cursor(col+4, row+5);
+	set_cursor(col+9, row);
+	setForegroundColor(COLOR_LIGHT_GREEN);
+	print("#   #"); set_cursor(col+9, row+1);
+	print("##  #"); set_cursor(col+9, row+2);
+	print("# # #"); set_cursor(col+9, row+3);
+	print("#  ##"); set_cursor(col+9, row+4);
+	print("#   #"); set_cursor(col+9, row+5);
+	set_cursor(col+15, row);
+	setForegroundColor(COLOR_PURPLE);
+	print(" ## "); set_cursor(col+15, row+1);
+	print("#  #"); set_cursor(col+15, row+2);
+	print("# ##"); set_cursor(col+15, row+3);
+	print("#  #"); set_cursor(col+15, row+4);
+	print(" ## "); set_cursor(col+15, row+5);
+	// Print N
+	// Print G
+
+	setBackgroundColor(COLOR_DEFAULT);
+	setForegroundColor(COLOR_WHITE);
 }
 
 void printHTP(uint8_t start_col, uint8_t start_row) {
 	uint8_t col = start_col, row = start_row;
+	setForegroundColor(COLOR_RED);
 	set_cursor(col, row++);
 	print("*Note, Do not hold the button!");
 	set_cursor(col, row++);
 	print("   Use SPAMING instead...");
 	set_cursor(col, row++);
 	set_cursor(col, row++);
+	setForegroundColor(COLOR_YELLOW);
 	char buffer[50];
 	sprintf(buffer, "Who got %d point before, win!", win_score);
 	print(buffer);
@@ -712,12 +831,12 @@ void printHTP(uint8_t start_col, uint8_t start_row) {
 	print("paddle 2 (left) use key \'w\' & \'s\'");
 	set_cursor(col, row++);
 	set_cursor(col, row++);
+	setForegroundColor(COLOR_WHITE);
 	print("Press 's' to start the game");
-	set_cursor(col, row++);
-	print("Press 'c' to credit");
 }
 
 void printGameOver(uint8_t start_col, uint8_t start_row) {
+	const uint8_t colors[] = { 40, 81, 220, 202, 127 };
 	uint8_t col = start_col, row = start_row;
 	char *msg1[5] = {
 			"#   # ### #   # #   # #### ###      #   ",
@@ -740,28 +859,45 @@ void printGameOver(uint8_t start_col, uint8_t start_row) {
 	set_cursor(col, row++); set_cursor(col, row++);
 
 	switch (winner) {
-	case 2:
-		set_cursor(col, row++); print(msg1[0]);
-		set_cursor(col, row++); print(msg1[1]);
-		set_cursor(col, row++); print(msg1[2]);
-		set_cursor(col, row++); print(msg1[3]);
-		set_cursor(col, row++); print(msg1[4]);
-		break;
 	case 1:
-		set_cursor(col, row++); print(msg2[0]);
-		set_cursor(col, row++); print(msg2[1]);
-		set_cursor(col, row++); print(msg2[2]);
-		set_cursor(col, row++); print(msg2[3]);
-		set_cursor(col, row++); print(msg2[4]);
+		setForegroundColor(colors[0]); set_cursor(col, row++); print(msg1[0]);
+		setForegroundColor(colors[1]); set_cursor(col, row++); print(msg1[1]);
+		setForegroundColor(colors[2]); set_cursor(col, row++); print(msg1[2]);
+		setForegroundColor(colors[3]); set_cursor(col, row++); print(msg1[3]);
+		setForegroundColor(colors[4]); set_cursor(col, row++); print(msg1[4]);
+		break;
+	case 2:
+		setForegroundColor(colors[0]); set_cursor(col, row++); print(msg2[0]);
+		setForegroundColor(colors[1]); set_cursor(col, row++); print(msg2[1]);
+		setForegroundColor(colors[2]); set_cursor(col, row++); print(msg2[2]);
+		setForegroundColor(colors[3]); set_cursor(col, row++); print(msg2[3]);
+		setForegroundColor(colors[4]); set_cursor(col, row++); print(msg2[4]);
 		break;
 	}
+
+	setForegroundColor(COLOR_WHITE);
 	return;
 }
 
-void printCredit() {
-
+void printCredit(uint8_t start_col, uint8_t start_row) {
+	set_cursor(start_col, start_row);
+	char cpr = 184;
+	HAL_UART_Transmit(&huart2, &cpr, 1, HAL_MAX_DELAY);
+	print("2020 KoFeeBriAN");
 }
 /* USER CODE END 4 */
+
+void setBackgroundColor(uint8_t color) {
+	char buffer[50];
+	HAL_UART_Transmit(&huart2, buffer, sprintf(buffer, "\033[48:5:%dm", color), HAL_MAX_DELAY);
+	return;
+}
+
+void setForegroundColor(uint8_t color) {
+	char buffer[50];
+	HAL_UART_Transmit(&huart2, buffer, sprintf(buffer, "\033[38:5:%dm", color), HAL_MAX_DELAY);
+	return;
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
